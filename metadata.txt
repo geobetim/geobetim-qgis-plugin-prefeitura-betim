@@ -1,0 +1,16 @@
+[general]
+name=Prefeitura de Betim
+qgisMinimumVersion=3.28
+description=Conjunto de algoritmos de geoprocessamento da Prefeitura de Betim para edição da camada de trechos-logradouros.
+about=Plugin com um provider do Processing ("Prefeitura de Betim") que reúne algoritmos de edição da camada de trechos-logradouros, agrupados por escopo. Algoritmos atuais, no grupo "Trecho logradouro": numeração dos trechos de cada logradouro na ordem espacial (grava o número sequencial inteiro por segmento num atributo; logradouro já numerado é ignorado com aviso, a menos que "Sobrescrever numeração" esteja ligado), e remoção de trechos de passagem (a própria camada de trechos é sempre usada, sem parâmetro, para dividir um trecho onde ele cruza outro logradouro sem nó compartilhado; colapsa cada segmento de passagem — sequência de trechos do mesmo logradouro ligados só por nós de passagem — num trecho só, o maior, estendido pelos vértices dos demais; com camadas de quebra opcionais, linha ou polígono pela borda, que bloqueiam o colapso nos nós que tocam e dividem qualquer trecho em escopo que cruzem no meio, com chave primária dos registros novos pela sequência do Geomedia em camada Oracle). Trechos com código de logradouro nulo são desconsiderados. Todo algoritmo aplica o resultado no buffer de edição da camada — os valores ficam visíveis no mapa e só são gravados quando o operador salva as edições, o que permite inspecionar antes e reverter tudo de uma vez.
+version=0.4.0
+author=Prefeitura de Betim
+email=tuffisal@gmail.com
+tracker=
+repository=
+hasProcessingProvider=yes
+tags=cadastro,logradouro,trecho,trecho de passagem,numeração,processing
+category=Vector
+icon=icone.svg
+experimental=True
+deprecated=False
