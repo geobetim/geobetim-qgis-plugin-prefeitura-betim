@@ -72,16 +72,39 @@ def nos_tocados_por_quebra(nos, camadas_quebra, tol):
     return bloqueados
 
 
+def _partes(geometria):
+    """As partes (``QgsAbstractGeometry``) de ``geometria`` — uma lista com a
+    própria geometria para uma feição simples, ou uma por elemento para uma
+    multi-geometria (ex.: a borda de um polígono com buracos, cada anel uma
+    parte independente)."""
+    corpo = geometria.constGet()
+    if geometria.isMultipart():
+        return [corpo.geometryN(i) for i in range(corpo.numGeometries())]
+    return [corpo]
+
+
 def _pontas(geometria):
-    """As duas pontas (``QgsGeometry`` de ponto) de uma geometria de linha —
-    primeiro e último vértice. Vazia se a geometria não tiver vértice."""
-    vertices = list(geometria.vertices())
-    if not vertices:
-        return []
-    return [
-        QgsGeometry.fromPointXY(QgsPointXY(vertices[0])),
-        QgsGeometry.fromPointXY(QgsPointXY(vertices[-1])),
-    ]
+    """Pontos (``QgsGeometry`` de ponto) candidatos a "quase toque" de cada
+    parte de ``geometria``: o primeiro e o último vértice para uma parte
+    aberta (linha comum). Um anel fechado — a borda de um polígono via
+    ``_fronteira``, cada anel (externo ou de um buraco) sempre fechado — não
+    tem uma ponta real: o primeiro/último vértice de ``vertices()`` é só o
+    ponto onde a conversão polígono→linha começou a percorrer aquele anel
+    (com buracos, um vértice de emenda arbitrário por anel, sem relação com
+    onde o anel de fato tangencia outra geometria). Nesse caso, todo vértice
+    do anel volta como candidato — não só o de emenda. Vazia se a geometria
+    não tiver vértice."""
+    pontos = []
+    for parte in _partes(geometria):
+        vertices = list(parte.vertices())
+        if not vertices:
+            continue
+        primeiro, ultimo = QgsPointXY(vertices[0]), QgsPointXY(vertices[-1])
+        if len(vertices) > 2 and primeiro == ultimo:
+            pontos.extend(QgsPointXY(v) for v in vertices)
+        else:
+            pontos.extend([primeiro, ultimo])
+    return [QgsGeometry.fromPointXY(p) for p in pontos]
 
 
 def intersecao_interna(linha, geometria, tol):
@@ -92,14 +115,19 @@ def intersecao_interna(linha, geometria, tol):
     agrega múltiplas geometrias.
 
     Além da interseção exata do GEOS, também conta como ponto de interseção
-    um **quase toque**: a ponta de ``geometria`` a ``tol`` ou menos do
-    traçado de ``linha``, mesmo sem o predicado exato do GEOS reconhecer —
+    um **quase toque** — qualquer ponto de uma geometria a ``tol`` ou menos
+    do traçado da outra, mesmo sem o predicado exato do GEOS reconhecer:
     caso degenerado (ponto efetivamente sobre a linha, a menos de ruído de
     ponto flutuante) em que ``intersects()`` pode falhar por imprecisão
-    numérica mesmo a uma distância real irrisória. Uma ponta da própria
+    numérica mesmo a uma distância real irrisória. Testa a ponta de
+    ``geometria`` contra o traçado de ``linha`` (cobre uma geometria
+    candidata cuja ponta encosta no meio de ``linha``) e **cada vértice**
+    de ``linha`` — não só suas pontas — contra o traçado de ``geometria``
+    (cobre um vértice interno de ``linha`` encostando em qualquer ponto de
+    ``geometria``, vértice ou meio de aresta). Uma ponta da própria
     ``linha`` nunca gera um ponto de interseção **interno** — por definição
-    fica sempre em ``d = 0`` ou ``d = comprimento``, fora do intervalo — não
-    precisa ser testada.
+    fica sempre em ``d = 0`` ou ``d = comprimento``, fora do intervalo — o
+    filtro final já descarta essas sem precisar de um caso especial.
     """
     comprimento = linha.length()
     distancias = []
@@ -114,6 +142,11 @@ def intersecao_interna(linha, geometria, tol):
     for ponta in _pontas(geometria):
         if linha.distance(ponta) <= tol:
             distancias.append(linha.lineLocatePoint(ponta))
+
+    for v in linha.vertices():
+        ponto = QgsGeometry.fromPointXY(QgsPointXY(v))
+        if geometria.distance(ponto) <= tol:
+            distancias.append(linha.lineLocatePoint(ponto))
 
     return sorted(d for d in distancias if tol < d < comprimento - tol)
 

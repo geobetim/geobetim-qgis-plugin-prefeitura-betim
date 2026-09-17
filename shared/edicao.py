@@ -18,7 +18,7 @@ def edicao_sem_commit(camada, rotulo):
 
     Uso::
 
-        with edicao_sem_commit(camada, "Remover trechos de passagem"):
+        with edicao_sem_commit(camada, "Quebrar e remover trechos de passagem"):
             camada.changeGeometry(fid, nova_geom)
             camada.addFeature(nova_feicao)
             camada.deleteFeature(fid_removido)

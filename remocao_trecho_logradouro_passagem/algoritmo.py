@@ -1,9 +1,12 @@
-"""Algoritmo do Processing: Remover trechos de passagem.
+"""Algoritmo do Processing: Quebrar e remover trechos de passagem.
 
 Para cada ``COD_LOGRADOURO`` em escopo, em três fases: fase 0 — a própria
 camada de trechos é fonte obrigatória de cruzamento (sempre, sem parâmetro):
 um trecho em escopo que cruza qualquer outro trecho da vizinhança, do mesmo
-código ou não, é dividido ali; um código fora de escopo nunca é tocado; fase
+código ou não, é dividido ali; por padrão um código fora de escopo nunca é
+tocado, só serve de candidato de cruzamento — a menos que o parâmetro de
+também quebrar o de fora esteja ligado, em que ele também é dividido, sem
+entrar nas fases seguintes; fase
 1 — encontra os segmentos de passagem
 (trechos ligados só por nós de passagem, já considerando os nós da fase 0) e
 colapsa cada um de 2+ trechos num só (o maior; empate pela chave primária
@@ -29,8 +32,15 @@ from qgis.core import (
     QgsRectangle,
     QgsWkbTypes,
 )
-from qgis.PyQt.QtCore import QCoreApplication
+from qgis.PyQt.QtCore import QCoreApplication, QVariant
 
+from ..numeracao_trecho_logradouro import (
+    GrafoLogradouro,
+    NumeracaoError,
+    SequenciadorAutomatico,
+    atribuir,
+    parse_geometria,
+)
 from ..shared.camada import avisar_sem_codigo, exigir_crs_metrico, ler_camada
 from ..shared.edicao import edicao_sem_commit, exigir
 from ..shared.topologia import IndiceDeNos
@@ -40,23 +50,35 @@ from .quebra import nos_tocados_por_quebra, quebrar
 from .quebra_entre_logradouros import quebrar_cruzamentos_entre_logradouros
 from .sequence_geomedia import resolver_chaves
 
+_TIPOS_INTEIROS = (
+    QVariant.Int,
+    QVariant.LongLong,
+    QVariant.UInt,
+    QVariant.ULongLong,
+    QVariant.Double,
+)
+
 
 class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
     INPUT = "INPUT"
     APENAS_SELECIONADAS = "APENAS_SELECIONADAS"
     CAMPO_CODIGO = "CAMPO_CODIGO"
     TOL_VERTICE = "TOL_VERTICE"
+    QUEBRAR_FORA_DE_ESCOPO = "QUEBRAR_FORA_DE_ESCOPO"
     CAMADA_QUEBRA_1 = "CAMADA_QUEBRA_1"
     CAMADA_QUEBRA_2 = "CAMADA_QUEBRA_2"
     CAMPO_CHAVE_PRIMARIA = "CAMPO_CHAVE_PRIMARIA"
+    NUMERAR_APOS = "NUMERAR_APOS"
+    CAMPO_SEQUENCIAL = "CAMPO_SEQUENCIAL"
+    TOL_GAP = "TOL_GAP"
 
     # -- identidade --------------------------------------------------------
 
     def name(self):
-        return "remover_trechos_passagem"
+        return "quebrar_remover_trechos_passagem"
 
     def displayName(self):
-        return self.tr("Remover trechos de passagem")
+        return self.tr("Quebrar e remover trechos de passagem")
 
     def group(self):
         return self.tr("Trecho logradouro")
@@ -85,8 +107,12 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
             "inclusive um X sem vértice em nenhum dos dois lados, ou um "
             "quase toque dentro da tolerância de encaixe — qualquer outro "
             "trecho na vizinhança, do mesmo COD_LOGRADOURO ou não, ele é "
-            "dividido ali; um código fora de escopo nunca é alterado, só "
-            "serve de candidato de cruzamento.\n\n"
+            "dividido ali. Por padrão, um código fora de escopo nunca é "
+            "alterado, só serve de candidato de cruzamento; marque 'Também "
+            "quebrar o outro logradouro no cruzamento' para dividir também "
+            "o trecho de fora nesse ponto — só a divisão, sem entrar em "
+            "colapso de segmento de passagem nem quebra por camada de "
+            "quebra do código de fora nesta execução.\n\n"
             "Camadas de quebra (opcionais, até duas; linha ou polígono — polígono "
             "conta pela borda, não pela área): uma feição de quebra que encosta "
             "num nó torna esse nó cruzamento — o segmento para ali e não colapsa "
@@ -107,7 +133,14 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
             "camada'. Antes disso dá para inspecionar e reverter tudo de uma "
             "vez.\n\n"
             "Trechos com o código do logradouro nulo são desconsiderados.\n\n"
-            "A camada precisa estar em CRS projetado (unidade em metros)."
+            "A camada precisa estar em CRS projetado (unidade em metros).\n\n"
+            "'Numerar os trechos após a remoção/quebra' (desmarcado por padrão): "
+            "depois de aplicar a remoção/quebra, numera automaticamente os "
+            "mesmos COD_LOGRADOURO processados (lendo a geometria já "
+            "atualizada), sempre sobrescrevendo a numeração anterior — sem "
+            "expor essa escolha como parâmetro. Os parâmetros 'Atributo do "
+            "número sequencial' e 'Tolerância de gap' só são usados quando "
+            "esta opção está marcada."
         )
 
     def createInstance(self):
@@ -158,6 +191,17 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
             )
         )
         self.addParameter(
+            QgsProcessingParameterBoolean(
+                self.QUEBRAR_FORA_DE_ESCOPO,
+                self.tr(
+                    "Também quebrar o outro logradouro no cruzamento (o "
+                    "trecho de fora do escopo é dividido, mas não colapsa "
+                    "nem quebra por camada de quebra nesta execução)"
+                ),
+                defaultValue=False,
+            )
+        )
+        self.addParameter(
             QgsProcessingParameterVectorLayer(
                 self.CAMADA_QUEBRA_1,
                 self.tr("Camada de quebra 1 (opcional)"),
@@ -187,6 +231,39 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
             chave.flags() | QgsProcessingParameterDefinition.FlagAdvanced
         )
         self.addParameter(chave)
+        self.addParameter(
+            QgsProcessingParameterBoolean(
+                self.NUMERAR_APOS,
+                self.tr("Numerar os trechos após a remoção/quebra"),
+                defaultValue=False,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterField(
+                self.CAMPO_SEQUENCIAL,
+                self.tr(
+                    "Numeração — atributo do número sequencial do trecho "
+                    "(inteiro; só usado se 'Numerar os trechos após a "
+                    "remoção/quebra' estiver marcado)"
+                ),
+                parentLayerParameterName=self.INPUT,
+                type=QgsProcessingParameterField.Numeric,
+                optional=True,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterNumber(
+                self.TOL_GAP,
+                self.tr(
+                    "Numeração — tolerância de gap entre trechos do mesmo "
+                    "logradouro (m; só usado se 'Numerar os trechos após a "
+                    "remoção/quebra' estiver marcado)"
+                ),
+                type=QgsProcessingParameterNumber.Double,
+                defaultValue=30.0,
+                minValue=0.0,
+            )
+        )
 
     # -- execução ------------------------------------------------------
 
@@ -206,9 +283,17 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
 
         nome_codigo = self.parameterAsString(parameters, self.CAMPO_CODIGO, context)
         tol = self.parameterAsDouble(parameters, self.TOL_VERTICE, context)
+        quebrar_fora_de_escopo = self.parameterAsBool(
+            parameters, self.QUEBRAR_FORA_DE_ESCOPO, context
+        )
         nome_pk = self.parameterAsString(
             parameters, self.CAMPO_CHAVE_PRIMARIA, context
         )
+        numerar_apos = self.parameterAsBool(parameters, self.NUMERAR_APOS, context)
+        nome_sequencial = self.parameterAsString(
+            parameters, self.CAMPO_SEQUENCIAL, context
+        )
+        tol_gap = self.parameterAsDouble(parameters, self.TOL_GAP, context)
         camadas_quebra = [
             c
             for c in (
@@ -226,6 +311,24 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
         if nome_pk and campos.indexFromName(nome_pk) < 0:
             nome_pk = ""  # parâmetro inválido: ignora, como se não tivesse sido informado
         idx_pk_campo = campos.indexFromName(nome_pk) if nome_pk else -1
+
+        idx_sequencial = -1
+        if numerar_apos:
+            idx_sequencial = campos.indexFromName(nome_sequencial)
+            if idx_sequencial < 0:
+                raise QgsProcessingException(
+                    self.tr(
+                        "Numeração após a remoção/quebra: atributo do número "
+                        "sequencial não encontrado."
+                    )
+                )
+            if campos.at(idx_sequencial).type() not in _TIPOS_INTEIROS:
+                raise QgsProcessingException(
+                    self.tr(
+                        "Numeração após a remoção/quebra: o atributo do número "
+                        "sequencial precisa ser numérico (inteiro ou real)."
+                    )
+                )
 
         feedback.pushInfo(self.tr("Lendo a camada..."))
         campos_extra = (nome_pk,) if nome_pk else ()
@@ -301,7 +404,12 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
             pontos_de_corte,
             avisos_fase0,
         ) = quebrar_cruzamentos_entre_logradouros(
-            ids_escopo_fase0, coords_por_id, geom_por_id_viz, cod_por_id_viz, tol
+            ids_escopo_fase0,
+            coords_por_id,
+            geom_por_id_viz,
+            cod_por_id_viz,
+            tol,
+            quebrar_fora_de_escopo=quebrar_fora_de_escopo,
         )
         for aviso in avisos_fase0:
             feedback.pushWarning(aviso)
@@ -410,6 +518,16 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
                     "quebrar, nem cruzamento entre logradouros para dividir."
                 )
             )
+            if numerar_apos:
+                feedback.pushInfo(self.tr("Numerando os trechos processados..."))
+                numerados_apos, falhados_apos = self._numerar_codigos_afetados(
+                    camada, codigos_escopo, nome_codigo, idx_sequencial, tol, tol_gap, feedback
+                )
+                feedback.pushInfo(
+                    self.tr(
+                        "Numeração: {0} logradouro(s) numerado(s) · {1} com falha."
+                    ).format(numerados_apos, falhados_apos)
+                )
             return {}
 
         # -- separa o que é id real do que é id temporário da fase 0 --------
@@ -448,7 +566,7 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
         # -- aplica na EDIÇÃO da camada (sem commit) ------------------
         multi = QgsWkbTypes.isMultiType(camada.wkbType())
         novos_com_chave = 0
-        with edicao_sem_commit(camada, self.tr("Remover trechos de passagem")):
+        with edicao_sem_commit(camada, self.tr("Quebrar e remover trechos de passagem")):
             for fid, coords in geom_nova_reais.items():
                 exigir(
                     camada.changeGeometry(fid, self._geom(coords, multi)),
@@ -504,6 +622,22 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
                 len(origem_real) - novos_fase0_com_chave,
             )
         )
+        codigos_fora_divididos = {
+            cod_por_id_fase0[origem]
+            for origem in set(origem_real.values())
+            if cod_por_id_fase0[origem] not in codigos_escopo
+        }
+        if codigos_fora_divididos:
+            feedback.pushWarning(
+                self.tr(
+                    "COD_LOGRADOURO fora de escopo dividido pelo cruzamento "
+                    "('Também quebrar o outro logradouro no cruzamento'): {0}. "
+                    "A geometria desses trechos mudou, mas o número sequencial "
+                    "deles não é recalculado por esta execução (mesmo com "
+                    "'Numerar os trechos após a remoção/quebra' marcado) — "
+                    "rode a numeração separadamente para esses códigos."
+                ).format(", ".join(str(c) for c in sorted(codigos_fora_divididos, key=str)))
+            )
         feedback.pushInfo(
             self.tr(
                 "Concluído: {0} segmento(s) de passagem colapsado(s) · {1} "
@@ -520,6 +654,17 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
                 cods_pulados,
             )
         )
+        if numerar_apos:
+            feedback.pushInfo(self.tr("Numerando os trechos processados..."))
+            numerados_apos, falhados_apos = self._numerar_codigos_afetados(
+                camada, codigos_escopo, nome_codigo, idx_sequencial, tol, tol_gap, feedback
+            )
+            feedback.pushInfo(
+                self.tr(
+                    "Numeração: {0} logradouro(s) numerado(s) · {1} com falha."
+                ).format(numerados_apos, falhados_apos)
+            )
+
         feedback.pushInfo(
             self.tr(
                 "As mudanças estão na EDIÇÃO da camada. Revise no mapa e use "
@@ -534,3 +679,82 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
         if multi:
             return QgsGeometry.fromMultiPolylineXY([coords])
         return QgsGeometry.fromPolylineXY(coords)
+
+    def _numerar_codigos_afetados(
+        self, camada, codigos, nome_codigo, idx_sequencial, tol_vertice, tol_gap, feedback
+    ):
+        """Numera ``codigos`` lendo a camada de novo — já com a geometria da
+        remoção/quebra aplicada no buffer de edição — sempre sobrescrevendo
+        (a geometria acabou de mudar, a numeração anterior está obsoleta).
+        Reaproveita as mesmas funções puras do algoritmo de numeração
+        standalone; não instancia o ``QgsProcessingAlgorithm`` dele.
+        """
+        leitura = ler_camada(camada, nome_codigo, feedback=feedback)
+        if feedback.isCanceled():
+            return 0, 0
+        avisar_sem_codigo(leitura, feedback)
+        geom_por_id = leitura.geom_por_id
+        cod_por_id = leitura.cod_por_id
+        por_codigo = leitura.por_codigo
+
+        a_numerar = [cod for cod in codigos if por_codigo.get(cod)]
+        if not a_numerar:
+            return 0, 0
+
+        bbox = QgsRectangle()
+        for cod in a_numerar:
+            for fid in por_codigo[cod]:
+                bbox.combineExtentWith(geom_por_id[fid].boundingBox())
+        bbox.grow(tol_vertice)
+        ids_vizinhanca = leitura.indice_espacial.intersects(bbox)
+
+        parseados = {}
+        for fid in ids_vizinhanca:
+            try:
+                parseados[fid] = parse_geometria(fid, cod_por_id[fid], geom_por_id[fid])
+            except NumeracaoError as ex:
+                feedback.pushWarning(str(ex))
+        grafo = GrafoLogradouro(parseados.values(), tol_vertice)
+
+        resultado = {}
+        numerados = 0
+        falhados = 0
+        for cod in a_numerar:
+            ids = por_codigo[cod]
+            if any(fid not in parseados for fid in ids):
+                feedback.pushWarning(
+                    self.tr(
+                        "Numeração após remoção/quebra — COD_LOGRADOURO {0}: "
+                        "algum trecho ficou fora do grafo; pulado."
+                    ).format(cod)
+                )
+                falhados += 1
+                continue
+            alvo = [parseados[fid] for fid in ids]
+            try:
+                grafo.definir_alvo(alvo)
+                ordem = SequenciadorAutomatico(cod, alvo, grafo, tol_gap).run()
+                numeros = atribuir(ordem, grafo)
+            except NumeracaoError as ex:
+                feedback.pushWarning(
+                    self.tr(
+                        "Numeração após remoção/quebra — COD_LOGRADOURO {0}: {1}"
+                    ).format(cod, ex)
+                )
+                falhados += 1
+                continue
+            resultado.update(numeros)
+            numerados += 1
+
+        if resultado:
+            with edicao_sem_commit(
+                camada,
+                self.tr("Numeração após quebrar e remover trechos de passagem"),
+            ):
+                for fid, n in resultado.items():
+                    exigir(
+                        camada.changeAttributeValue(fid, idx_sequencial, int(n)),
+                        "changeAttributeValue, feição {0}".format(fid),
+                    )
+
+        return numerados, falhados
