@@ -4,10 +4,10 @@ A **camada de trechos** é fonte **obrigatória** de cruzamento na remoção de
 trecho de passagem — sempre, sem parâmetro, além de qualquer **camada de
 quebra** auxiliar. Roda antes de tudo: um trecho em escopo que cruza — com ou
 sem nó compartilhado hoje, inclusive um X sem vértice em nenhum dos dois
-lados — um trecho de **outro** ``COD_LOGRADOURO`` na vizinhança é dividido
-ali; o outro ``COD_LOGRADOURO`` nunca é tocado, mesmo fora de escopo. Um
-cruzamento entre trechos do **mesmo** ``COD_LOGRADOURO`` sem nó compartilhado
-é atípico: não quebra, só gera aviso.
+lados, ou um quase toque (ponta a poucos milímetros/centímetros do traçado do
+outro, dentro da tolerância de encaixe) — um trecho de **qualquer** outro
+código na vizinhança, mesmo `COD_LOGRADOURO` ou não, é dividido ali; um
+código fora de escopo nunca é tocado, só serve de candidato de cruzamento.
 
 Reaproveita a primitiva de interseção interna de ``quebra.py`` — sempre linha
 contra linha, já que a própria camada de trechos é sempre ``LineString`` (o
@@ -47,10 +47,10 @@ def _indice_espacial(ids, coords_por_id, tol):
 def quebrar_cruzamentos_entre_logradouros(
     ids_escopo, coords_por_id, geom_por_id, cod_por_id, tol
 ):
-    """Quebra cada trecho de ``ids_escopo`` onde cruza um trecho de **outro**
-    ``COD_LOGRADOURO`` dentro de ``coords_por_id`` (a vizinhança já carregada
-    em memória — inclui trechos fora de escopo, só como candidatos de
-    cruzamento; nunca modificados).
+    """Quebra cada trecho de ``ids_escopo`` onde cruza qualquer outro trecho
+    dentro de ``coords_por_id`` (a vizinhança já carregada em memória — inclui
+    trechos fora de escopo, só como candidatos de cruzamento; nunca
+    modificados), do mesmo ``COD_LOGRADOURO`` ou não.
 
     ``coords_por_id``/``geom_por_id``/``cod_por_id`` — dicionários por id de
     trecho, cobrindo toda a vizinhança (``ids_escopo`` é um subconjunto).
@@ -69,9 +69,9 @@ def quebrar_cruzamentos_entre_logradouros(
       atributos e resolver a chave primária;
     - ``pontos_de_corte`` — ``QgsPointXY`` de cada cruzamento dividido, para o
       chamador marcar como cruzamento no índice de nós compartilhado;
-    - ``avisos`` — textos para o log (cruzamento atípico entre trechos do
-      mesmo ``COD_LOGRADOURO`` sem nó compartilhado; nada é dividido nesse
-      caso).
+    - ``avisos`` — textos para o log; reservado para uso futuro, hoje sempre
+      vazio (todo cruzamento encontrado é dividido, não há mais caso
+      "atípico" que só loga).
     """
     ids_escopo = set(ids_escopo)
     idx = _indice_espacial(coords_por_id.keys(), coords_por_id, tol)
@@ -87,7 +87,6 @@ def quebrar_cruzamentos_entre_logradouros(
     origem_real = {}
     pontos_de_corte = []
     avisos = []
-    avisados = set()
     proximo_temp_id = -1
 
     for fid in sorted(ids_escopo):
@@ -96,28 +95,15 @@ def quebrar_cruzamentos_entre_logradouros(
         linha = QgsGeometry.fromPolylineXY(coords)
         bbox = _bbox_de(coords, tol)
 
-        geoms_outro_cod = []
-        for cand in idx.intersects(bbox):
-            if cand == fid:
-                continue
-            cand_cod = cod_por_id[cand]
-            cand_geom = geom_por_id_orig[cand]
-            if cand_cod == cod:
-                if distancias_de_intersecao_interna(linha, [cand_geom], tol):
-                    par = frozenset((fid, cand))
-                    if par not in avisados:
-                        avisados.add(par)
-                        avisos.append(
-                            "trechos {0} e {1} (mesmo COD_LOGRADOURO {2}) se "
-                            "cruzam sem nó compartilhado; atípico, não "
-                            "quebrado.".format(fid, cand, cod)
-                        )
-                continue
-            geoms_outro_cod.append(cand_geom)
+        geoms_candidatas = [
+            geom_por_id_orig[cand]
+            for cand in idx.intersects(bbox)
+            if cand != fid
+        ]
 
-        if not geoms_outro_cod:
+        if not geoms_candidatas:
             continue
-        distancias = distancias_de_intersecao_interna(linha, geoms_outro_cod, tol)
+        distancias = distancias_de_intersecao_interna(linha, geoms_candidatas, tol)
         if not distancias:
             continue
 

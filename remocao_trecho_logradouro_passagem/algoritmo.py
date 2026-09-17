@@ -2,8 +2,9 @@
 
 Para cada ``COD_LOGRADOURO`` em escopo, em três fases: fase 0 — a própria
 camada de trechos é fonte obrigatória de cruzamento (sempre, sem parâmetro):
-um trecho em escopo que cruza um trecho de outro código é dividido ali, o
-outro código nunca é tocado; fase 1 — encontra os segmentos de passagem
+um trecho em escopo que cruza qualquer outro trecho da vizinhança, do mesmo
+código ou não, é dividido ali; um código fora de escopo nunca é tocado; fase
+1 — encontra os segmentos de passagem
 (trechos ligados só por nós de passagem, já considerando os nós da fase 0) e
 colapsa cada um de 2+ trechos num só (o maior; empate pela chave primária
 configurada ou pelo menor id); fase 2 — divide nas interseções internas com
@@ -79,13 +80,13 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
             "COD_LOGRADOURO das feições selecionadas; desmarque a opção para "
             "processar todos os COD_LOGRADOURO distintos da camada.\n\n"
             "A própria camada de trechos também é usada, sempre (sem "
-            "parâmetro para desligar), para achar cruzamento com outro "
-            "logradouro: onde um trecho em escopo cruza — com ou sem nó "
-            "compartilhado hoje, inclusive um X sem vértice em nenhum dos "
-            "dois lados — um trecho de outro COD_LOGRADOURO, ele é dividido "
-            "ali; o outro COD_LOGRADOURO nunca é alterado, mesmo fora de "
-            "escopo. Cruzamento entre trechos do mesmo COD_LOGRADOURO sem nó "
-            "compartilhado é atípico: não é dividido, só aparece no log.\n\n"
+            "parâmetro para desligar), para achar cruzamento: onde um "
+            "trecho em escopo cruza — com ou sem nó compartilhado hoje, "
+            "inclusive um X sem vértice em nenhum dos dois lados, ou um "
+            "quase toque dentro da tolerância de encaixe — qualquer outro "
+            "trecho na vizinhança, do mesmo COD_LOGRADOURO ou não, ele é "
+            "dividido ali; um código fora de escopo nunca é alterado, só "
+            "serve de candidato de cruzamento.\n\n"
             "Camadas de quebra (opcionais, até duas; linha ou polígono — polígono "
             "conta pela borda, não pela área): uma feição de quebra que encosta "
             "num nó torna esse nó cruzamento — o segmento para ali e não colapsa "
@@ -282,8 +283,9 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
         # cruzamento, além de qualquer camada de quebra auxiliar. Roda antes de
         # tudo, sobre a topologia original: um trecho em escopo que cruza — com
         # ou sem nó compartilhado, inclusive um X sem vértice em nenhum dos dois
-        # lados — um trecho de OUTRO COD_LOGRADOURO na vizinhança é dividido ali;
-        # o outro código nunca é tocado, mesmo fora de escopo.
+        # lados, ou um quase toque dentro da tolerância de encaixe — qualquer
+        # outro trecho na vizinhança, do mesmo COD_LOGRADOURO ou não, é dividido
+        # ali; um código fora de escopo nunca é tocado, só serve de candidato.
         ids_escopo_fase0 = {
             fid
             for cod in codigos_escopo

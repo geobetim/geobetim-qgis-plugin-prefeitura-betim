@@ -72,24 +72,50 @@ def nos_tocados_por_quebra(nos, camadas_quebra, tol):
     return bloqueados
 
 
+def _pontas(geometria):
+    """As duas pontas (``QgsGeometry`` de ponto) de uma geometria de linha —
+    primeiro e último vértice. Vazia se a geometria não tiver vértice."""
+    vertices = list(geometria.vertices())
+    if not vertices:
+        return []
+    return [
+        QgsGeometry.fromPointXY(QgsPointXY(vertices[0])),
+        QgsGeometry.fromPointXY(QgsPointXY(vertices[-1])),
+    ]
+
+
 def intersecao_interna(linha, geometria, tol):
     """Distâncias, ao longo de ``linha`` (``QgsGeometry`` de linha), das
     interseções **internas** (``tol < d < comprimento - tol``) com uma única
     ``geometria`` já pronta para comparar (ex.: já reduzida à borda, se for o
     caso). Ordenadas; não trata duplicatas — isso é responsabilidade de quem
     agrega múltiplas geometrias.
+
+    Além da interseção exata do GEOS, também conta como ponto de interseção
+    um **quase toque**: a ponta de ``geometria`` a ``tol`` ou menos do
+    traçado de ``linha``, mesmo sem o predicado exato do GEOS reconhecer —
+    caso degenerado (ponto efetivamente sobre a linha, a menos de ruído de
+    ponto flutuante) em que ``intersects()`` pode falhar por imprecisão
+    numérica mesmo a uma distância real irrisória. Uma ponta da própria
+    ``linha`` nunca gera um ponto de interseção **interno** — por definição
+    fica sempre em ``d = 0`` ou ``d = comprimento``, fora do intervalo — não
+    precisa ser testada.
     """
     comprimento = linha.length()
-    inter = linha.intersection(geometria)
-    if inter.isEmpty():
-        return []
     distancias = []
-    for v in inter.vertices():
-        d = linha.lineLocatePoint(QgsGeometry.fromPointXY(QgsPointXY(v)))
-        if tol < d < comprimento - tol:
-            distancias.append(d)
-    distancias.sort()
-    return distancias
+
+    inter = linha.intersection(geometria)
+    if not inter.isEmpty():
+        for v in inter.vertices():
+            distancias.append(
+                linha.lineLocatePoint(QgsGeometry.fromPointXY(QgsPointXY(v)))
+            )
+
+    for ponta in _pontas(geometria):
+        if linha.distance(ponta) <= tol:
+            distancias.append(linha.lineLocatePoint(ponta))
+
+    return sorted(d for d in distancias if tol < d < comprimento - tol)
 
 
 def distancias_de_intersecao_interna(linha, geometrias, tol):
