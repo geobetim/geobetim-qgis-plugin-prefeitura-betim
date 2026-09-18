@@ -1,6 +1,6 @@
 # Spec: Reorganizar o projeto — plugin como raiz
 
-**Status:** ready-for-agent
+**Status:** implementado
 
 O repositório `F:/projetos/editor_trechologradouro` hoje mistura o plugin
 QGIS (`plugin-qgis/prefeitura_betim/`, com seu próprio git e remoto no

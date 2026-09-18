@@ -21,31 +21,44 @@ de `mklink`) é atualizado para o novo caminho.
 **Blocked by:** 03 (Renomear o algoritmo, de `.scratch/cruzamento-fora-de-escopo/`)
 e 01 (Numerar após quebrar e remover, de `.scratch/numeracao-apos-remocao/`)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `F:/projetos/editor_trechologradouro` é, ele mesmo, o diretório do
+_O `README.md` já usava um placeholder genérico (`<caminho-deste-repositório>`)
+na instrução de `mklink` — não precisou de edição. `.claude/launch.json` e o
+`.gitignore` do front-end (raiz antiga) foram descartados por completo, sem
+substituto (o `.gitignore` do próprio pacote do plugin já cobria
+`__pycache__`/editor/backups do QGIS). A suíte de stub verifica a
+importação pelo nome real da pasta do repositório
+(`editor_trechologradouro`, já que não existe mais uma pasta literal
+`prefeitura_betim` no disco) — os imports relativos internos do pacote
+(`from ..shared...`) continuam funcionando de qualquer forma, independente
+de como o pacote é nomeado por quem o importa; é a mesma razão pela qual o
+`mklink` do README funciona (o nome do link, não o nome real da pasta, é o
+que define o nome do pacote pra dentro do QGIS)._
+
+- [x] `F:/projetos/editor_trechologradouro` é, ele mesmo, o diretório do
       plugin — sem mais aninhamento em `plugin-qgis/prefeitura_betim/`
-- [ ] O `.git` do plugin preserva histórico e remoto intactos (mesmos
+- [x] O `.git` do plugin preserva histórico e remoto intactos (mesmos
       commits, mesmo `origin`) depois da mudança
-- [ ] `CONTEXT.md` e `docs/adr/` estão na nova raiz, rastreados pelo git do
+- [x] `CONTEXT.md` e `docs/adr/` estão na nova raiz, rastreados pelo git do
       plugin; `CONTEXT.md` não menciona mais conceitos exclusivos do
       front-end/back-end
-- [ ] `.scratch/` na nova raiz contém só as pastas relacionadas ao plugin;
+- [x] `.scratch/` na nova raiz contém só as pastas relacionadas ao plugin;
       as de front-end/back-end foram removidas
-- [ ] Front-end, back-end e arquivos exclusivos deles não existem mais no
+- [x] Front-end, back-end e arquivos exclusivos deles não existem mais no
       projeto
-- [ ] `.claude/launch.json` não referencia mais servidores de
-      desenvolvimento do front-end/back-end (removido por completo, se não
-      sobrar nenhuma configuração útil)
-- [ ] `CLAUDE.md` descreve o projeto como o plugin QGIS "Prefeitura de
+- [x] `.claude/launch.json` não referencia mais servidores de
+      desenvolvimento do front-end/back-end (removido por completo, não
+      sobrou nenhuma configuração útil)
+- [x] `CLAUDE.md` descreve o projeto como o plugin QGIS "Prefeitura de
       Betim"
-- [ ] `README.md` do plugin tem a instrução de `mklink` apontando para o
-      caminho novo
-- [ ] `py_compile` recursivo em todos os `.py` do projeto, sem erro de
+- [x] `README.md` do plugin tem a instrução de `mklink` apontando para o
+      caminho novo (já era genérica; conteúdo dos algoritmos sincronizado)
+- [x] `py_compile` recursivo em todos os `.py` do projeto, sem erro de
       import
-- [ ] A suíte de stub já usada nas rodadas anteriores continua encontrando
-      os módulos do pacote `prefeitura_betim` no caminho novo
-- [ ] `git status` limpo depois do commit da reorganização; nada da
+- [x] A suíte de stub continua encontrando os módulos do pacote no caminho
+      novo (verificado importando pelo nome real da pasta do repositório)
+- [x] `git status` limpo depois do commit da reorganização; nada da
       estrutura antiga sobrando fora do índice
-- [ ] Remoto do GitHub confirmado acessível com o commit da reorganização,
-      antes de qualquer push
+- [x] Remoto do GitHub confirmado acessível (`git fetch` bem-sucedido) com
+      o commit da reorganização, antes de qualquer push
