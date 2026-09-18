@@ -111,11 +111,20 @@ ele cai é tratado como **nó de passagem** entre os trechos reais que também o
 tocam: ele herda o mesmo **número sequencial do trecho** dos vizinhos, nunca
 entra no percurso nem na pilha de bifurcação, e nunca desloca a posição do
 percurso — resolvido assim que seu nó é alcançado, não por encadeamento. Na
-**remoção de trecho de passagem**, ele é absorvido (apagado) junto com o
-**segmento de passagem** que contém seus dois vizinhos reais, sem ganhar
-geometria própria no **trecho absorvedor**. Fora de um contexto de nó de
-passagem — isolado, ou num **cruzamento** ou **extremidade** — nenhum dos dois
-algoritmos o remove ou renumera; só gera aviso, como problema de dado.
+**remoção de trecho de passagem**, ele sempre funde com o maior trecho real do
+mesmo `COD_LOGRADOURO` que tocar seu nó — mesmo critério do **trecho
+absorvedor** (maior comprimento, empate pela chave primária ou pelo menor
+`IDPKTRLOGR`) — mesmo que esse nó seja um **cruzamento** real (com outro
+`COD_LOGRADOURO`, ou bifurcação de 3+ trechos reais do mesmo logradouro): o
+cruzamento sobrevive (o vizinho já tem, por construção, um vértice bem ali —
+a fusão nunca precisa estender geometria, só apaga o registro do trecho
+degenerado; ver ADR-0009, que revoga parte do ADR-0008). Exceções: um nó
+bloqueado por **camada de quebra** continua impedindo a fusão ali (sinal
+explícito do operador, ver **Camada de quebra**); e um trecho degenerado
+isolado — sem nenhum trecho real do mesmo
+`COD_LOGRADOURO` tocando o nó — não tem para onde fundir, então não é tocado.
+Nesses dois casos, e sempre que um trecho degenerado é encontrado, os dois
+algoritmos emitem aviso.
 _Avoid_: trecho de comprimento zero, laço, self-loop.
 
 **Segmento**:

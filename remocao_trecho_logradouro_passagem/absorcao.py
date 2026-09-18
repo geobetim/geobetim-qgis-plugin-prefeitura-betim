@@ -19,7 +19,7 @@ def _mesmo(a, b, tol):
     return a.distance(b) <= tol
 
 
-def _maior(ids, geom_por_id, valor_pk_por_id=None):
+def maior_por_comprimento(ids, geom_por_id, valor_pk_por_id=None):
     """Maior por comprimento 2D; empate pelo menor valor de ``valor_pk_por_id``
     quando disponível, senão pelo menor id da feição."""
 
@@ -136,7 +136,7 @@ def colapsar(segmentos, indice, coords_por_id, geom_por_id, tol, valor_pk_por_id
     for seg in segmentos:
         if len(seg) < 2:
             continue
-        absorvedor = _maior(seg, geom_por_id, valor_pk_por_id)
+        absorvedor = maior_por_comprimento(seg, geom_por_id, valor_pk_por_id)
 
         pontas_ini = set(indice.extremos_do_trecho(seg[0]))
         pontas_fim = set(indice.extremos_do_trecho(seg[-1]))

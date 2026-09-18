@@ -8,16 +8,21 @@ mesmo código ligados só por nós de passagem, com **2 ou mais** trechos — é
 a operação colapsa num trecho só. O recorte é o grafo restrito ao código.
 
 Um **trecho degenerado** (as duas pontas caem no mesmo nó, dentro da
-tolerância de encaixe — ver ADR-0008) nunca conta como ponta ao decidir se um
-nó é nó de passagem — só os trechos reais contam, e ele nunca entra na lista
-ordenada de um segmento (``colapsar`` não muda: inserir um trecho cujas duas
-pontas coincidem no meio de um segmento de 2 trechos reais confundiria a
-heurística de anel fechado, que olha só se o primeiro e o último elemento
-compartilham nó). Em vez disso, ``trechos_degenerados_absorviveis`` mapeia
-cada trecho degenerado aos seus vizinhos reais; quem chama ``colapsar``
-decide, depois, se esses vizinhos de fato colapsaram — e se sim, apaga o
-trecho degenerado junto, sem lhe dar geometria própria.
+tolerância de encaixe — ver ADR-0008/ADR-0009) nunca conta como ponta ao
+decidir se um nó é nó de passagem — só os trechos reais contam, e ele nunca
+entra na lista ordenada de um segmento nem em ``colapsar``. Em vez disso,
+``trecho_degenerado_fundivel`` acha o maior trecho real do mesmo código que
+toca o nó dele — mesmo fora de um nó de passagem (ADR-0009: o trecho
+degenerado sempre funde com o maior vizinho real, mesmo num cruzamento,
+exceto se isolado ou bloqueado por camada de quebra). A fusão nunca precisa
+de geometria nova: o nó do trecho degenerado só existe porque uma ponta do
+vizinho já cai dentro da tolerância de encaixe *desse mesmo nó* — o vizinho
+já tem, por construção, um vértice ali. Quem chama só usa o vizinho
+devolvido para decidir se apaga o trecho degenerado; nenhuma geometria é
+alterada.
 """
+
+from .absorcao import maior_por_comprimento
 
 
 def trechos_degenerados(indice, ids_cod):
@@ -64,7 +69,7 @@ def segmentos_de_passagem(indice, ids_cod, cod, nos_bloqueados, degenerados=None
     ``nos_bloqueados`` — índices de nó tocados por camada de quebra (viram
     cruzamento). Trechos degenerados (ver ADR-0008) nunca entram nem na
     contagem de grau, nem na lista ordenada — só os reais formam segmento;
-    ``trechos_degenerados_absorviveis`` cobre a absorção deles. ``degenerados``
+    ``trecho_degenerado_fundivel`` cobre a fusão deles. ``degenerados``
     é opcional — quem já os calculou (ex.: para o aviso de feedback) evita
     recalcular sobre a mesma coleção de ids.
     """
@@ -100,27 +105,24 @@ def segmentos_de_passagem(indice, ids_cod, cod, nos_bloqueados, degenerados=None
     return segmentos
 
 
-def trechos_degenerados_absorviveis(indice, ids_cod, cod, nos_bloqueados, degenerados=None):
-    """``{trecho_degenerado: (vizinho_real_1, vizinho_real_2)}`` — só para os
-    trechos degenerados cujo nó é nó de passagem real entre dois trechos do
-    mesmo ``COD_LOGRADOURO``. Quem chama ``colapsar`` sobre os segmentos de
-    ``segmentos_de_passagem`` usa isto depois: se um dos vizinhos de um
-    trecho degenerado aparecer no resultado do colapso (absorvido ou
-    apagado), o trecho degenerado apaga junto, sem geometria própria — nunca
-    é ele quem decide a geometria do trecho absorvedor. ``degenerados`` é
-    opcional, mesmo motivo de ``segmentos_de_passagem``.
+def trecho_degenerado_fundivel(indice, id_degenerado, ids_cod, nos_bloqueados, geom_por_id, valor_pk_por_id=None):
+    """Maior trecho real (mesmo critério de desempate do **trecho
+    absorvedor**: comprimento, empate pela chave primária ou pelo menor id)
+    do mesmo ``COD_LOGRADOURO`` que toca o nó de ``id_degenerado`` — ou
+    ``None`` se não houver nenhum (isolado) ou se o nó estiver bloqueado por
+    camada de quebra (sinal explícito do operador, que continua impedindo a
+    fusão ali — ver ADR-0009). ``ids_cod`` já deve ser um ``set`` — quem
+    chama isto por vários trechos degenerados do mesmo código evita
+    reconverter a cada chamada.
     """
-    ids_cod = set(ids_cod)
-    degenerados = trechos_degenerados(indice, ids_cod) if degenerados is None else degenerados
-    resultado = {}
-    for d in degenerados:
-        no = indice.extremos_do_trecho(d)[0]
-        if not _no_de_passagem(indice, no, cod, ids_cod, nos_bloqueados, degenerados):
-            continue
-        vizinhos = tuple(
-            tid
-            for tid, _ in indice.trechos_no_no(no)
-            if tid in ids_cod and tid != d
-        )
-        resultado[d] = vizinhos
-    return resultado
+    no = indice.extremos_do_trecho(id_degenerado)[0]
+    if no in nos_bloqueados:
+        return None
+    vizinhos = [
+        tid
+        for tid, _ in indice.trechos_no_no(no)
+        if tid in ids_cod and tid != id_degenerado and not indice.eh_degenerado(tid)
+    ]
+    if not vizinhos:
+        return None
+    return maior_por_comprimento(vizinhos, geom_por_id, valor_pk_por_id)

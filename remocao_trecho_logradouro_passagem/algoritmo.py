@@ -52,8 +52,8 @@ from ..shared.topologia import IndiceDeNos
 from .absorcao import colapsar
 from .identificacao import (
     segmentos_de_passagem,
+    trecho_degenerado_fundivel,
     trechos_degenerados,
-    trechos_degenerados_absorviveis,
 )
 from .quebra import nos_tocados_por_quebra, quebrar
 from .quebra_entre_logradouros import quebrar_cruzamentos_entre_logradouros
@@ -484,28 +484,28 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
             segmentos = segmentos_de_passagem(
                 indice, ids_cod, cod, nos_bloqueados, degenerados=degenerados_cod
             )
-            if not segmentos:
-                continue
-
-            geom_nova, apagar, avisos = colapsar(
-                segmentos, indice, coords_por_id, geom_por_id_viz, tol, valor_pk_por_id
-            )
-            for aviso in avisos:
-                feedback.pushWarning(
-                    "COD_LOGRADOURO {0}: {1}".format(cod, aviso)
+            geom_nova, apagar, avisos = {}, set(), []
+            if segmentos:
+                geom_nova, apagar, avisos = colapsar(
+                    segmentos, indice, coords_por_id, geom_por_id_viz, tol, valor_pk_por_id
                 )
+                for aviso in avisos:
+                    feedback.pushWarning(
+                        "COD_LOGRADOURO {0}: {1}".format(cod, aviso)
+                    )
 
-            # Trecho degenerado (ADR-0008): nunca entra em segmentos_de_passagem
-            # nem em colapsar — se o(s) vizinho(s) reais dele de fato
-            # colapsaram (absorvido ou apagado), ele apaga junto, sem ganhar
-            # geometria própria.
+            # Trecho degenerado (ADR-0009): funde sempre com o maior trecho
+            # real do mesmo código que tocar seu nó — mesmo num cruzamento
+            # real (bifurcação, ou outro COD_LOGRADOURO), exceto isolado ou
+            # bloqueado por camada de quebra. Nunca precisa de geometria
+            # nova: o vizinho já tem, por construção, um vértice bem ali.
             if degenerados_cod:
-                colapsados = apagar | set(geom_nova.keys())
-                absorviveis = trechos_degenerados_absorviveis(
-                    indice, ids_cod, cod, nos_bloqueados, degenerados=degenerados_cod
-                )
-                for did, vizinhos in absorviveis.items():
-                    if any(v in colapsados for v in vizinhos):
+                ids_cod_set = set(ids_cod)
+                for did in sorted(degenerados_cod):
+                    vizinho = trecho_degenerado_fundivel(
+                        indice, did, ids_cod_set, nos_bloqueados, geom_por_id_viz, valor_pk_por_id
+                    )
+                    if vizinho is not None:
                         apagar.add(did)
 
             # Conta o que colapsou de fato (um absorvedor por segmento), não o
