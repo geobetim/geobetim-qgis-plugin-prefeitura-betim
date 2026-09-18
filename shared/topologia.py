@@ -58,3 +58,10 @@ class IndiceDeNos:
 
     def mesmo_ponto(self, a, b):
         return a.distance(b) <= self._tol
+
+    def eh_degenerado(self, id_trecho):
+        """Trecho degenerado (ADR-0008): as duas pontas caem no mesmo nó,
+        dentro da tolerância de encaixe — não representa deslocamento
+        espacial real."""
+        a, b = self._extremos[id_trecho]
+        return a == b

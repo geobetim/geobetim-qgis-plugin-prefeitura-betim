@@ -66,6 +66,7 @@ class GrafoLogradouro:
         self.adjacencia = None
         self.extremos_do_trecho = None
         self.cruzamentos = None
+        self.degenerados = None
 
     def definir_alvo(self, alvo):
         """
@@ -73,14 +74,26 @@ class GrafoLogradouro:
         todos do mesmo COD_LOGRADOURO. Um nó é cruzamento se tiver grau >= 3
         dentro deste alvo (bifurcação) ou se algum trecho de outro
         COD_LOGRADOURO também tocar esse nó.
+
+        Um trecho degenerado (as duas pontas caem no mesmo nó, dentro da
+        tolerância de encaixe) não conta para grau/adjacência/cruzamento —
+        ele nunca representa deslocamento real, então nunca deve ser
+        candidato de percurso nem inflar a contagem de um nó (ver
+        ADR-0008). Seu mapeamento trecho->nó continua em
+        ``extremos_do_trecho``, para a atribuição de número sequencial achar
+        o nó compartilhado com os vizinhos.
         """
         self.graus = [0] * len(self.nos)
         self.adjacencia = {i: [] for i in range(len(self.nos))}
         self.extremos_do_trecho = {}
+        self.degenerados = set()
 
         for t in alvo:
             a, b = self._indice.extremos_do_trecho(t.id)
             self.extremos_do_trecho[t.id] = (a, b)
+            if self._indice.eh_degenerado(t.id):
+                self.degenerados.add(t.id)
+                continue
             self.adjacencia[a].append(Incidencia(t.id, b))
             self.graus[a] += 1
             self.adjacencia[b].append(Incidencia(t.id, a))

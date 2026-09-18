@@ -41,11 +41,20 @@ from ..numeracao_trecho_logradouro import (
     atribuir,
     parse_geometria,
 )
-from ..shared.camada import avisar_sem_codigo, exigir_crs_metrico, ler_camada
+from ..shared.camada import (
+    avisar_sem_codigo,
+    avisar_trechos_degenerados,
+    exigir_crs_metrico,
+    ler_camada,
+)
 from ..shared.edicao import edicao_sem_commit, exigir
 from ..shared.topologia import IndiceDeNos
 from .absorcao import colapsar
-from .identificacao import segmentos_de_passagem
+from .identificacao import (
+    segmentos_de_passagem,
+    trechos_degenerados,
+    trechos_degenerados_absorviveis,
+)
 from .quebra import nos_tocados_por_quebra, quebrar
 from .quebra_entre_logradouros import quebrar_cruzamentos_entre_logradouros
 from .sequence_geomedia import resolver_chaves
@@ -469,8 +478,11 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
                 cods_pulados += 1
                 continue
 
+            degenerados_cod = trechos_degenerados(indice, ids_cod)
+            avisar_trechos_degenerados(feedback, cod, degenerados_cod)
+
             segmentos = segmentos_de_passagem(
-                indice, ids_cod, cod, nos_bloqueados
+                indice, ids_cod, cod, nos_bloqueados, degenerados=degenerados_cod
             )
             if not segmentos:
                 continue
@@ -482,6 +494,20 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
                 feedback.pushWarning(
                     "COD_LOGRADOURO {0}: {1}".format(cod, aviso)
                 )
+
+            # Trecho degenerado (ADR-0008): nunca entra em segmentos_de_passagem
+            # nem em colapsar — se o(s) vizinho(s) reais dele de fato
+            # colapsaram (absorvido ou apagado), ele apaga junto, sem ganhar
+            # geometria própria.
+            if degenerados_cod:
+                colapsados = apagar | set(geom_nova.keys())
+                absorviveis = trechos_degenerados_absorviveis(
+                    indice, ids_cod, cod, nos_bloqueados, degenerados=degenerados_cod
+                )
+                for did, vizinhos in absorviveis.items():
+                    if any(v in colapsados for v in vizinhos):
+                        apagar.add(did)
+
             # Conta o que colapsou de fato (um absorvedor por segmento), não o
             # que foi identificado — segmento pulado por aviso fica de fora.
             if geom_nova:
@@ -743,6 +769,7 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
                 )
                 falhados += 1
                 continue
+            avisar_trechos_degenerados(feedback, cod, grafo.degenerados)
             resultado.update(numeros)
             numerados += 1
 

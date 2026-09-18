@@ -103,6 +103,21 @@ disso, nenhuma feição de **camada de quebra** encostar nele (na borda, se a
 feição for poligonal).
 _Avoid_: nó de continuação.
 
+**Trecho degenerado**:
+Trecho cujas duas pontas caem no mesmo **nó**, dentro da tolerância de encaixe
+— não representa deslocamento espacial real (ex.: um trecho de 0,03 m cujo
+início e fim colapsam no mesmo ponto). Na **numeração automática**, o nó onde
+ele cai é tratado como **nó de passagem** entre os trechos reais que também o
+tocam: ele herda o mesmo **número sequencial do trecho** dos vizinhos, nunca
+entra no percurso nem na pilha de bifurcação, e nunca desloca a posição do
+percurso — resolvido assim que seu nó é alcançado, não por encadeamento. Na
+**remoção de trecho de passagem**, ele é absorvido (apagado) junto com o
+**segmento de passagem** que contém seus dois vizinhos reais, sem ganhar
+geometria própria no **trecho absorvedor**. Fora de um contexto de nó de
+passagem — isolado, ou num **cruzamento** ou **extremidade** — nenhum dos dois
+algoritmos o remove ou renumera; só gera aviso, como problema de dado.
+_Avoid_: trecho de comprimento zero, laço, self-loop.
+
 **Segmento**:
 Sequência maximal de trechos de um logradouro que são consecutivos na sequência e
 estão ligados apenas por nós de passagem. Todos os trechos de um segmento

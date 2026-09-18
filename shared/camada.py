@@ -97,3 +97,16 @@ def avisar_sem_codigo(leitura, feedback):
                 leitura.sem_codigo
             )
         )
+
+
+def avisar_trechos_degenerados(feedback, cod, ids_degenerados):
+    """Aviso padrão para cada trecho degenerado (ADR-0008) encontrado num
+    ``COD_LOGRADOURO`` — duas pontas coincidentes dentro da tolerância de
+    encaixe. Comum à numeração automática e à remoção de trecho de
+    passagem, que tratam o trecho degenerado de formas diferentes mas
+    avisam o operador da mesma maneira."""
+    for did in sorted(ids_degenerados):
+        feedback.pushWarning(
+            "COD_LOGRADOURO {0}: trecho degenerado (IDPKTRLOGR {1}) — pontas "
+            "coincidentes dentro da tolerância de encaixe.".format(cod, did)
+        )

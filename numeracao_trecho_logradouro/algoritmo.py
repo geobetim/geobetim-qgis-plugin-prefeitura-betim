@@ -18,7 +18,12 @@ from qgis.core import (
 )
 from qgis.PyQt.QtCore import QCoreApplication, QVariant
 
-from ..shared.camada import avisar_sem_codigo, exigir_crs_metrico, ler_camada
+from ..shared.camada import (
+    avisar_sem_codigo,
+    avisar_trechos_degenerados,
+    exigir_crs_metrico,
+    ler_camada,
+)
 from ..shared.edicao import edicao_sem_commit, exigir
 from . import (
     GrafoLogradouro,
@@ -326,6 +331,8 @@ class NumeracaoPorLogradouroAlgorithm(QgsProcessingAlgorithm):
                 feedback.pushWarning("COD_LOGRADOURO {0}: {1}".format(cod, ex))
                 falhados += 1
                 continue
+
+            avisar_trechos_degenerados(feedback, cod, grafo.degenerados)
 
             resultado.update(numeros)
             numerados += 1

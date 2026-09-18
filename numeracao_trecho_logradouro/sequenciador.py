@@ -36,6 +36,14 @@ class SequenciadorAutomatico:
         self._tol_gap = float(tolerancia_gap)
         self._por_id = {t.id: t for t in self._alvo}
 
+        # Trecho degenerado (ambas as pontas no mesmo nó, ver ADR-0008): nunca
+        # é candidato de percurso, nunca disputa bifurcação. Resolvido assim
+        # que o nó em que cai é alcançado, seja qual for o motivo da visita.
+        self._pendentes_por_no = {}
+        for did in sorted(self._grafo.degenerados):
+            no = self._grafo.extremos_do_trecho[did][0]
+            self._pendentes_por_no.setdefault(no, []).append(did)
+
         # Estado de UMA tentativa — reiniciado a cada _tentar().
         self._ordem = []
         self._usados = set()
@@ -45,6 +53,14 @@ class SequenciadorAutomatico:
         self._direcao_chegada = QgsVector(1.0, 0.0)
 
     def run(self):
+        reais_existem = any(t.id not in self._grafo.degenerados for t in self._alvo)
+        if not reais_existem:
+            # Alvo é só trecho(s) degenerado(s) — não há nenhum percurso real
+            # a fazer; cada um vira sua própria posição na sequência.
+            self._ordem = sorted(t.id for t in self._alvo)
+            self._usados = set(self._ordem)
+            return list(self._ordem)
+
         candidatos = self._candidatos_de_partida()
         ultima_falha = None
         for c in candidatos:
@@ -68,7 +84,8 @@ class SequenciadorAutomatico:
         self._ordem.append(inicio_id)
         self._usados.add(inicio_id)
         self._direcao_chegada = self._direcao_de_saida(t0, no_origem)
-        self._no_atual = self._grafo.outro_no(inicio_id, no_origem)
+        self._resolver_degenerados(no_origem)
+        self._mover_para(self._grafo.outro_no(inicio_id, no_origem))
         self._registrar_junction(self._no_atual)
 
         while len(self._usados) < len(self._alvo):
@@ -80,7 +97,7 @@ class SequenciadorAutomatico:
                     if not self._continuar_disjunto():
                         break
                     continue
-                self._no_atual = alvo_j
+                self._mover_para(alvo_j)
                 d = self._direcao_na_chegada.get(alvo_j)
                 if d is not None:
                     self._direcao_chegada = d
@@ -116,8 +133,10 @@ class SequenciadorAutomatico:
     # ---- trecho inicial --------------------------------------------------
 
     def _candidatos_de_partida(self):
+        reais = [t for t in self._alvo if t.id not in self._grafo.degenerados]
+
         min_x = min_y = None
-        for t in self._alvo:
+        for t in reais:
             for c in t.coords:
                 if min_x is None or c.x() < min_x:
                     min_x = c.x()
@@ -127,7 +146,7 @@ class SequenciadorAutomatico:
 
         extremidades = [
             t
-            for t in self._alvo
+            for t in reais
             if self._grafo.graus[self._grafo.extremos_do_trecho[t.id][0]] == 1
             or self._grafo.graus[self._grafo.extremos_do_trecho[t.id][1]] == 1
         ]
@@ -146,7 +165,7 @@ class SequenciadorAutomatico:
         # Anel fechado: nenhum trecho de grau 1. Uma única tentativa.
         best = None
         best_d = None
-        for t in self._alvo:
+        for t in reais:
             d = min(c.distance(canto) for c in t.coords)
             if self._melhor(d, t.id, best_d, best):
                 best = t
@@ -191,13 +210,29 @@ class SequenciadorAutomatico:
         self._ordem.append(inc.id_trecho)
         self._usados.add(inc.id_trecho)
         self._direcao_chegada = self._direcao_de_saida(t, self._no_atual)
-        self._no_atual = inc.outro_no
+        self._mover_para(inc.outro_no)
         self._registrar_junction(self._no_atual)
 
     def _registrar_junction(self, no):
         if len(self._candidatos(no)) >= 2 and no not in self._junction_stack:
             self._junction_stack.append(no)
             self._direcao_na_chegada[no] = self._direcao_chegada
+
+    def _mover_para(self, no):
+        """Move ``_no_atual`` para ``no`` e resolve, ali mesmo, qualquer
+        trecho degenerado pendente — todo lugar que muda a posição do
+        percurso passa por aqui, para nunca esquecer de resolver (ADR-0008)."""
+        self._no_atual = no
+        self._resolver_degenerados(no)
+
+    def _resolver_degenerados(self, no):
+        """Absorve na sequência qualquer trecho degenerado pendente no nó
+        ``no`` — nunca disputou candidatura, nunca moveu ``_no_atual``; só
+        precisa ser marcado como numerado onde já estamos (ADR-0008)."""
+        for did in self._pendentes_por_no.get(no, ()):
+            if did not in self._usados:
+                self._ordem.append(did)
+                self._usados.add(did)
 
     def _continuar_disjunto(self):
         if len(self._usados) >= len(self._alvo):
@@ -235,8 +270,13 @@ class SequenciadorAutomatico:
 
         self._ordem.append(best.id)
         self._usados.add(best.id)
-        self._direcao_chegada = self._direcao_de_saida(best, no_entrada)
-        self._no_atual = self._grafo.outro_no(best.id, no_entrada)
+        # Um trecho degenerado não tem direção real (as duas pontas coincidem)
+        # — herdar a direção de chegada dele viciaria o desempate de uma
+        # bifurcação real no nó de destino (ADR-0008); mantém a direção
+        # anterior nesse caso.
+        if best.id not in self._grafo.degenerados:
+            self._direcao_chegada = self._direcao_de_saida(best, no_entrada)
+        self._mover_para(self._grafo.outro_no(best.id, no_entrada))
         self._registrar_junction(self._no_atual)
         return True
 
