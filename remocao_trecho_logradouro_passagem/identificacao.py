@@ -8,21 +8,25 @@ mesmo código ligados só por nós de passagem, com **2 ou mais** trechos — é
 a operação colapsa num trecho só. O recorte é o grafo restrito ao código.
 
 Um **trecho degenerado** (as duas pontas caem no mesmo nó, dentro da
-tolerância de encaixe — ver ADR-0008/ADR-0009) nunca conta como ponta ao
-decidir se um nó é nó de passagem — só os trechos reais contam, e ele nunca
-entra na lista ordenada de um segmento nem em ``colapsar``. Em vez disso,
-``trecho_degenerado_fundivel`` acha o maior trecho real do mesmo código que
-toca o nó dele — mesmo fora de um nó de passagem (ADR-0009: o trecho
-degenerado sempre funde com o maior vizinho real, mesmo num cruzamento,
-exceto se isolado ou bloqueado por camada de quebra). A fusão nunca precisa
-de geometria nova: o nó do trecho degenerado só existe porque uma ponta do
-vizinho já cai dentro da tolerância de encaixe *desse mesmo nó* — o vizinho
-já tem, por construção, um vértice ali. Quem chama só usa o vizinho
-devolvido para decidir se apaga o trecho degenerado; nenhuma geometria é
-alterada.
+tolerância de encaixe — ver ADR-0008/ADR-0009/ADR-0010) nunca conta como
+ponta ao decidir se um nó é nó de passagem — só os trechos reais contam, e
+ele nunca entra na lista ordenada de um segmento (``segmentos_de_passagem``
+não muda). Em vez disso, ``trecho_degenerado_fundivel`` acha o maior trecho
+real do mesmo código que toca o nó dele — mesmo fora de um nó de passagem
+(ADR-0009: o trecho degenerado sempre funde com o maior vizinho real, mesmo
+num cruzamento, exceto se isolado ou bloqueado por camada de quebra). A
+fusão de fato **precisa** estender a geometria do vizinho (ADR-0010): as
+duas pontas de um trecho degenerado quase nunca são exatamente a mesma —
+cada uma costuma coincidir exatamente com a ponta de um vizinho real
+diferente, e são esses vizinhos que ficam com um vão real entre si (dentro
+da tolerância de encaixe, mas não coincidentes) depois que o trecho
+degenerado é apagado. ``fundir_trecho_degenerado`` estende o vizinho
+escolhido através do trecho degenerado (reaproveitando ``colapsar``/
+``_estender`` com um "segmento" de 2 elementos) para fechar esse vão — sem
+tocar no outro vizinho, que nunca é candidato de fusão.
 """
 
-from .absorcao import maior_por_comprimento
+from .absorcao import colapsar, maior_por_comprimento
 
 
 def trechos_degenerados(indice, ids_cod):
@@ -126,3 +130,37 @@ def trecho_degenerado_fundivel(indice, id_degenerado, ids_cod, nos_bloqueados, g
     if not vizinhos:
         return None
     return maior_por_comprimento(vizinhos, geom_por_id, valor_pk_por_id)
+
+
+def fundir_trecho_degenerado(
+    indice,
+    id_degenerado,
+    vizinho,
+    coords_vizinho,
+    coords_degenerado,
+    geom_vizinho,
+    geom_degenerado,
+    tol,
+    valor_pk_por_id=None,
+):
+    """Estende ``vizinho`` através do trecho degenerado, fechando o vão real
+    entre ele e o outro vizinho (o que não foi escolhido) que o trecho
+    degenerado costumava preencher — ver ADR-0010. Monta um "segmento" de 2
+    elementos (nunca aciona a heurística de anel fechado, que exige 3+) e
+    reaproveita ``colapsar`` sem alterá-lo.
+
+    Devolve a nova lista de coordenadas de ``vizinho``, ou ``None`` se não
+    houve extensão (o ponto já estava coberto — por exemplo, ``vizinho`` já
+    foi estendido além dali por um colapso normal de segmento de passagem
+    na mesma execução). Em qualquer um dos dois casos, o trecho degenerado
+    já pode ser apagado — quem chama decide isso, não esta função.
+    """
+    geom_nova, _apagar, _avisos = colapsar(
+        [[vizinho, id_degenerado]],
+        indice,
+        {vizinho: coords_vizinho, id_degenerado: coords_degenerado},
+        {vizinho: geom_vizinho, id_degenerado: geom_degenerado},
+        tol,
+        valor_pk_por_id,
+    )
+    return geom_nova.get(vizinho)

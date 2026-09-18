@@ -51,6 +51,7 @@ from ..shared.edicao import edicao_sem_commit, exigir
 from ..shared.topologia import IndiceDeNos
 from .absorcao import colapsar
 from .identificacao import (
+    fundir_trecho_degenerado,
     segmentos_de_passagem,
     trecho_degenerado_fundivel,
     trechos_degenerados,
@@ -494,19 +495,31 @@ class RemoverTrechosPassagemAlgorithm(QgsProcessingAlgorithm):
                         "COD_LOGRADOURO {0}: {1}".format(cod, aviso)
                     )
 
-            # Trecho degenerado (ADR-0009): funde sempre com o maior trecho
-            # real do mesmo código que tocar seu nó — mesmo num cruzamento
-            # real (bifurcação, ou outro COD_LOGRADOURO), exceto isolado ou
-            # bloqueado por camada de quebra. Nunca precisa de geometria
-            # nova: o vizinho já tem, por construção, um vértice bem ali.
+            # Trecho degenerado (ADR-0009/0010): funde sempre com o maior
+            # trecho real do mesmo código que tocar seu nó — mesmo num
+            # cruzamento real (bifurcação, ou outro COD_LOGRADOURO), exceto
+            # isolado ou bloqueado por camada de quebra. A fusão estende o
+            # vizinho pelo vão real que o trecho degenerado preenchia — a
+            # menos que esse vão já tenha sido coberto por um colapso normal
+            # de segmento de passagem na mesma execução.
             if degenerados_cod:
                 ids_cod_set = set(ids_cod)
                 for did in sorted(degenerados_cod):
                     vizinho = trecho_degenerado_fundivel(
                         indice, did, ids_cod_set, nos_bloqueados, geom_por_id_viz, valor_pk_por_id
                     )
-                    if vizinho is not None:
-                        apagar.add(did)
+                    if vizinho is None:
+                        continue
+                    base_atual = geom_nova.get(vizinho, coords_por_id[vizinho])
+                    nova_geom = fundir_trecho_degenerado(
+                        indice, did, vizinho,
+                        base_atual, coords_por_id[did],
+                        geom_por_id_viz[vizinho], geom_por_id_viz[did],
+                        tol, valor_pk_por_id,
+                    )
+                    if nova_geom is not None:
+                        geom_nova[vizinho] = nova_geom
+                    apagar.add(did)
 
             # Conta o que colapsou de fato (um absorvedor por segmento), não o
             # que foi identificado — segmento pulado por aviso fica de fora.

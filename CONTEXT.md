@@ -116,12 +116,17 @@ mesmo `COD_LOGRADOURO` que tocar seu nó — mesmo critério do **trecho
 absorvedor** (maior comprimento, empate pela chave primária ou pelo menor
 `IDPKTRLOGR`) — mesmo que esse nó seja um **cruzamento** real (com outro
 `COD_LOGRADOURO`, ou bifurcação de 3+ trechos reais do mesmo logradouro): o
-cruzamento sobrevive (o vizinho já tem, por construção, um vértice bem ali —
-a fusão nunca precisa estender geometria, só apaga o registro do trecho
-degenerado; ver ADR-0009, que revoga parte do ADR-0008). Exceções: um nó
-bloqueado por **camada de quebra** continua impedindo a fusão ali (sinal
-explícito do operador, ver **Camada de quebra**); e um trecho degenerado
-isolado — sem nenhum trecho real do mesmo
+cruzamento sobrevive, mas a fusão estende a geometria do vizinho para
+fechar o vão real que existia entre ele e o outro lado do trecho degenerado
+— as duas pontas de um trecho degenerado quase nunca coincidem exatamente
+(cada uma costuma bater exatamente com um vizinho diferente, deixando um
+vão dentro da tolerância de encaixe entre os dois vizinhos); só quando esse
+vão já foi coberto por outro colapso na mesma execução é que nenhuma
+geometria muda (ver ADR-0009, que revoga parte do ADR-0008, e ADR-0010, que
+corrige a premissa de que a fusão nunca precisaria de geometria nova).
+Exceções: um nó bloqueado por **camada de quebra** continua impedindo a
+fusão ali (sinal explícito do operador, ver **Camada de quebra**); e um
+trecho degenerado isolado — sem nenhum trecho real do mesmo
 `COD_LOGRADOURO` tocando o nó — não tem para onde fundir, então não é tocado.
 Nesses dois casos, e sempre que um trecho degenerado é encontrado, os dois
 algoritmos emitem aviso.

@@ -49,6 +49,20 @@ def _estender(base, r, tol):
 
     Devolve a nova lista de coordenadas, ou ``None`` se ``r`` não compartilha
     exatamente uma ponta com ``base`` (inclui o caso de laço: as duas pontas).
+
+    Quando ``r`` é ele mesmo curtíssimo (um trecho degenerado — ver
+    ADR-0009/0010), as duas pontas de ``r`` podem cair dentro da tolerância
+    da MESMA ponta de ``base`` ao mesmo tempo — nesse caso a ponta mais
+    próxima é a duplicata (descartada) e a mais distante é o vértice novo
+    que de fato estende ``base``. Para um ``r`` de comprimento normal isso
+    nunca é ambíguo (só uma das pontas cai perto), então o resultado não
+    muda em nenhum colapso comum.
+
+    Quando o novo vértice acrescido também cai dentro da tolerância da
+    ponta antiga de ``base`` (mesmo motivo: ``r`` curtíssimo), a antiga
+    ponta de ``base`` é descartada em favor dele — senão ``_limpar_
+    consecutivos`` manteria a ponta antiga (a primeira da dupla) e
+    descartaria justo o vértice novo que a extensão deveria acrescentar.
     """
     p0, pn = base[0], base[-1]
     r0, rm = r[0], r[-1]
@@ -58,14 +72,24 @@ def _estender(base, r, tol):
     if toca_p0 and toca_pn:
         return None
 
-    if _mesmo(pn, r0, tol):
-        return base + r[1:]
-    if _mesmo(pn, rm, tol):
-        return base + list(reversed(r))[1:]
-    if _mesmo(p0, r0, tol):
+    if toca_pn:
+        r0_bate = _mesmo(pn, r0, tol)
+        rm_bate = _mesmo(pn, rm, tol)
+        if r0_bate and (not rm_bate or pn.distance(r0) <= pn.distance(rm)):
+            novo = r[1:]
+        else:
+            novo = list(reversed(r))[1:]
+        if novo and _mesmo(pn, novo[0], tol):
+            return base[:-1] + novo
+        return base + novo
+
+    if toca_p0:
+        r0_bate = _mesmo(p0, r0, tol)
+        rm_bate = _mesmo(p0, rm, tol)
+        if rm_bate and (not r0_bate or p0.distance(rm) <= p0.distance(r0)):
+            return r[:-1] + base
         return list(reversed(r))[:-1] + base
-    if _mesmo(p0, rm, tol):
-        return r[:-1] + base
+
     return None
 
 
