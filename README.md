@@ -17,14 +17,20 @@ logradouro (`TRECHOLOGRADOURO`):
   logradouro na ordem espacial, gravando o número sequencial inteiro por
   segmento num atributo. Um logradouro já numerado é ignorado com aviso, a
   menos que "Sobrescrever numeração" esteja ligado.
-- **Remoção de trecho de passagem**: colapsa cada segmento de passagem —
-  sequência de trechos do mesmo logradouro ligados só por nós de passagem —
-  num trecho só, o maior, estendido pelos vértices dos demais. A própria
-  camada de trechos é sempre usada, sem parâmetro, para dividir um trecho onde
-  ele cruza outro logradouro sem nó compartilhado. Camadas de quebra
+- **Quebrar e remover trechos de passagem**: colapsa cada segmento de
+  passagem — sequência de trechos do mesmo logradouro ligados só por nós de
+  passagem — num trecho só, o maior, estendido pelos vértices dos demais. A
+  própria camada de trechos é sempre usada, sem parâmetro, para dividir um
+  trecho onde ele cruza qualquer outro trecho sem nó compartilhado — mesmo
+  logradouro ou não, inclusive um quase toque a qualquer ponto do traçado do
+  outro, dentro da tolerância de encaixe. Por padrão um código fora de
+  escopo nunca é tocado; "Também quebrar o outro logradouro no cruzamento"
+  divide também o trecho de fora, só nesse ponto. Camadas de quebra
   auxiliares (linha ou polígono, opcionais) bloqueiam o colapso nos nós que
   tocam e dividem qualquer trecho em escopo que cruzem no meio, com chave
   primária dos registros novos pela sequência do Geomedia em camada Oracle.
+  "Numerar os trechos após a remoção/quebra" encadeia a numeração
+  automática dos códigos processados, lendo a geometria já atualizada.
 
 Trechos com código de logradouro nulo são desconsiderados por ambos os
 algoritmos. Por padrão, os dois algoritmos atuam apenas sobre as feições
