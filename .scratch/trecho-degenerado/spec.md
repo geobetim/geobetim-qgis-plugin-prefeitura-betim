@@ -220,3 +220,9 @@ se estivesse sempre num **nó de passagem**:
   sobre a camada `TUFFI.TRECHOLOGRADOURO`) está registrado na conversa que
   originou este spec; os números de `COD_LOGRADOURO`/`IDPKTRLOGR` citados
   aqui vêm de dados reais de produção, não são hipotéticos.
+- **Correção pós-implementação**: a verificação final contra a camada real
+  mostrou que só `7644` (o caso investigado a fundo) e os 6 códigos que já
+  passavam eram de fato causados pelo trecho degenerado. `57`, `1078` e
+  `8130` continuam falhando na numeração — por gaps de dado reais e não
+  relacionados (mesma categoria do `COD_LOGRADOURO 7640`, já tratado antes
+  deste spec), não pelo bug do trecho degenerado. Ver notas no ticket 01.

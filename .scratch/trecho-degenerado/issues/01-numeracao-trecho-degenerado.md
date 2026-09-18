@@ -41,15 +41,26 @@ salto pra componente desconexo — reproduz exatamente o padrão do 7644 real;
 extremidade antes de salto; cruzamento real de 3 ramos; isolado; regressão
 sem degenerado) — todos GREEN. Regressão adicional manual: eixo paralelo
 (trecho desconectado legítimo) e anel fechado simples continuam produzindo a
-mesma sequência de antes. `py_compile` limpo no projeto inteiro. A
-verificação contra os 4 `COD_LOGRADOURO` reais (`57`, `1078`, `7644`,
-`8130`) via QGIS MCP ficou pendente — a instância do QGIS ficou
-inacessível no meio da sessão (parou de responder a `ping`/`diagnose` depois
-de uma tentativa de `reload_plugin`); os testes sintéticos reproduzem o
-padrão exato encontrado nesses códigos reais (mesma estrutura: nó interior
-com self-loop entre dois vizinhos reais, seguido de salto para componente
-desconexo), então a confiança na correção é alta, mas a confirmação direta
-na camada real deve ser feita quando o QGIS voltar a responder._
+mesma sequência de antes. `py_compile` limpo no projeto inteiro._
+
+_Verificação final contra a camada real (`TUFFI.TRECHOLOGRADOURO`), via QGIS
+MCP com o plugin recarregado: `COD_LOGRADOURO 7644` — o caso diagnosticado
+em detalhe — agora numera com sucesso (13 trechos, degenerado `33792`
+absorvido). Os 6 códigos que já passavam antes da correção (`2299`, `5465`,
+`3260`, `1418`, `7861`, `7740`) continuam passando. **Correção importante**:
+`57`, `1078` e `8130` — que eu tinha assumido serem o mesmo padrão de bug —
+**continuam falhando**, mas por uma causa diferente e não relacionada ao
+trecho degenerado: `1078` e `8130` falham com a mensagem idêntica de antes
+(mesmos IDs, mesma distância — nenhum dos trechos envolvidos é degenerado,
+todos com comprimento normal de 12–22 m); `57` falha com um gap menor e
+diferente do que antes (91,60 m em vez de 338,89 m — a correção eliminou a
+distorção causada pelo trecho degenerado, mas sobrou um vão real entre
+outros dois trechos normais). Os três são gaps de dado reais, da mesma
+categoria do caso original do `COD_LOGRADOURO 7640` (vão real acima da
+tolerância de 30 m) — fora do escopo deste ticket, que trata só do trecho
+degenerado. O critério de aceite original ("57, 1078 e 8130 numeram com
+sucesso") não se confirmou para esses três; o bug do trecho degenerado
+propriamente dito está corrigido e verificado (7644 + os 6 regressivos)._
 
 _Code review (`/code-review --level high`) encontrou e corrigiu: aviso de
 trecho degenerado ausente na numeração encadeada (`_numerar_codigos_afetados`

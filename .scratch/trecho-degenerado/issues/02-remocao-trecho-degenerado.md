@@ -54,6 +54,14 @@ GREEN. Regressão adicional manual: nó tocado por outro `COD_LOGRADOURO` e nó
 bloqueado por camada de quebra continuam corretamente impedindo nó de
 passagem. `py_compile` limpo no projeto inteiro._
 
+_Verificação final contra a camada real (`TUFFI.TRECHOLOGRADOURO`), via QGIS
+MCP: no `COD_LOGRADOURO 7644`, `segmentos_de_passagem` identifica
+`[33765, 33806, 33805, 33789, 33791, 33777]` como segmento de passagem
+(contém os dois vizinhos reais do trecho degenerado `33792`, `33791` e
+`33789`); depois do `colapsar`, `trechos_degenerados_absorviveis` confirma
+que `33792` deve ser absorvido, e ele entra em `apagar` junto com o resto do
+segmento — sem gerar aviso de "não encadeia" nem qualquer efeito colateral._
+
 - [ ] Trecho degenerado entre dois trechos reais que formam um segmento de
       passagem: o segmento colapsa incluindo o trecho degenerado — ele
       aparece no conjunto de trechos apagados, sem ganhar vértice no trecho
